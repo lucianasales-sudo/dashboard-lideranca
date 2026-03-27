@@ -2,51 +2,51 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Dashboard Liderança", layout="wide")
+# Configuração da página
+st.set_page_config(page_title="Dashboard de Liderança", layout="wide")
 
+# Carregamento dos dados
 @st.cache_data
 def load_data():
-    try:
-        # O segredo: on_bad_lines='skip' ignora a linha 93 que está com erro
-        df = pd.read_csv('dados2_lideranca.csv', 
-                         sep=';', 
-                         encoding='latin-1', 
-                         on_bad_lines='skip', 
-                         engine='python')
-        
-        # Limpa nomes de colunas
-        df.columns = [str(c).strip().upper() for c in df.columns]
-        return df
-    except Exception as e:
-        st.error(f"Erro ao ler o arquivo: {e}")
-        return None
+    df = pd.read_csv('dados2_lideranca.csv', sep=';')
+    # Limpeza básica: Converter colunas de texto para número onde necessário
+    cols_para_limpar = ['NOTA LOJA DO CORAÇÃO', 'TOTAL A RECEBER']
+    for col in cols_para_limpar:
+        df[col] = df[col].astype(str).str.replace('R\$ ', '', regex=True).str.replace('.', '').str.replace(',', '.')
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    return df
 
 df = load_data()
 
-if df is not None:
-    st.title("📊 Painel de Resultados")
-    
-    # Busca colunas por aproximação para evitar erros de acento
-    col_lider = [c for c in df.columns if 'LIDER' in c][0]
-    col_nota = [c for c in df.columns if 'NOTA' in c][0]
-    col_nome = [c for c in df.columns if 'NOME RH' in c or 'NOME INVOLVES' in c][0]
+st.title("📊 Painel de Resultados - Equipe")
 
-    # Ajusta nota (vírgula para ponto)
-    df[col_nota] = df[col_nota].astype(str).str.replace(',', '.')
-    df[col_nota] = pd.to_numeric(df[col_nota], errors='coerce').fillna(0)
+# Barra Lateral - Filtros
+st.sidebar.header("Filtros")
+lista_lideres = sorted(df['LIDERANCA'].unique())
+lider_selecionado = st.sidebar.selectbox("Selecione o Supervisor", lista_lideres)
 
-    # Filtro lateral
-    lista_lideres = sorted(df[col_lider].unique())
-    lider = st.sidebar.selectbox("Selecione o Supervisor", lista_lideres)
-    
-    df_filtrado = df[df[col_lider] == lider]
+# Filtrando os dados
+df_filtrado = df[df['LIDERANCA'] == lider_selecionado]
 
-    # Visualização
-    c1, c2 = st.columns(2)
-    c1.metric("Equipe", len(df_filtrado))
-    c2.metric("Média Nota", f"{df_filtrado[col_nota].mean():.1f}")
+# Métricas Principais
+col1, col2, col3 = st.columns(3)
+with col1:
+    media_nota = df_filtrado['NOTA LOJA DO CORAÇÃO'].mean()
+    st.metric("Média Nota Loja do Coração", f"{media_nota:.1f}")
+with col2:
+    total_equipe = len(df_filtrado)
+    st.metric("Total de Promotores", total_equipe)
+with col3:
+    total_premiacao = df_filtrado['TOTAL A RECEBER'].sum()
+    st.metric("Total Premiação", f"R$ {total_premiacao:,.2f}")
 
-    fig = px.bar(df_filtrado, x=col_nome, y=col_nota, title=f"Desempenho: {lider}")
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.dataframe(df_filtrado)
+# Gráfico de Desempenho
+st.subheader(f"Desempenho da Equipe: {lider_selecionado}")
+fig = px.bar(df_filtrado, x='NOME RH', y='NOTA LOJA DO CORAÇÃO', 
+             color='MEDALHA LOJA DO CORAÇÃO',
+             title="Nota por Promotor e Medalha")
+st.plotly_chart(fig, use_container_width=True)
+
+# Tabela detalhada
+st.subheader("Dados Detalhados")
+st.dataframe(df_filtrado[['NOME RH', 'MEDALHA LOJA DO CORAÇÃO', 'NOTA LOJA DO CORAÇÃO', 'TOTAL A RECEBER', 'STATUS PROMOTOR']])
