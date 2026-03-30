@@ -44,7 +44,7 @@ with col3:
 st.subheader(f"Desempenho da Equipe: {lider_selecionado}")
 fig = px.bar(df_filtrado, x='NOME RH', y='NOTA LOJA DO CORAÇÃO', 
              color='MEDALHA LOJA DO CORAÇÃO',
-             title="Nota por Promotor e Medalha")
+             title="Nota por Promotor e Medalha.")
 st.plotly_chart(fig, use_container_width=True)
 
 # Tabela detalhada
