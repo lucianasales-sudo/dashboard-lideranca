@@ -1,131 +1,244 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuração da página e Estilo CSS para design profissional
-st.set_page_config(page_title="Portal de Resultados | 3 Corações", layout="wide")
+# 1. Configuração de Estilo e Página
+st.set_page_config(page_title="Portal de Premiação", layout="wide", page_icon="☕")
 
+# CSS COM DESIGN CORPORATIVO E MOBILE-FIRST
 st.markdown("""
     <style>
-    /* Cor de destaque da 3 Corações e fontes */
-    .main { background-color: #f8f9fa; }
-    h1 { color: #c30c15; font-weight: 800; }
-    .stButton>button { 
-        background-color: #c30c15; 
-        color: white; 
-        font-weight: bold; 
-        border-radius: 8px;
-        height: 3em;
-        transition: 0.3s;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    .stApp {
+        background-color: #ffffff !important;
+        color: #1e293b !important;
+        font-family: 'Inter', sans-serif;
     }
-    .stButton>button:hover { background-color: #9d0a11; border: none; }
-    /* Estilização das métricas */
-    [data-testid="stMetricValue"] { color: #c30c15; font-size: 32px; }
-    [data-testid="stMetricLabel"] { font-size: 16px; font-weight: 600; }
+
+    /* Esconder elementos padrão do Streamlit */
+    #MainMenu, footer, header {visibility: hidden;}
+
+    /* Input e Formatação de Texto */
+    input { color: #1e293b !important; background-color: #ffffff !important; }
+    input::placeholder { color: #94a3b8 !important; opacity: 1; }
+
+    /* Cabeçalho */
+    .header-container {
+        display: flex; flex-direction: column; align-items: center;
+        text-align: center; padding: 5px 0px 15px 0px; width: 100%;
+    }
+    .logo-img { width: 55px; height: auto; margin-bottom: 8px; }
+    
+    .main-title { 
+        color: #1e293b !important; font-size: 16px; font-weight: 800; 
+        text-transform: uppercase; white-space: nowrap; width: 100vw; 
+        display: flex; justify-content: center; letter-spacing: 0.2px;
+    }
+    
+    .sub-header { color: #64748b !important; font-size: 12px; margin-top: 2px; }
+
+    /* Estilização dos Cards (Containers) */
+    div[data-testid="stVerticalBlock"] > div:has(div.stMarkdown) {
+        background-color: #ffffff !important; border: 1px solid #f1f5f9 !important;
+        border-radius: 12px; padding: 18px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); margin-bottom: 10px;
+    }
+
+    .card-title {
+        color: #0f172a !important; font-size: 13px !important; font-weight: 700 !important;
+        text-transform: uppercase !important; border-left: 4px solid #8B4513 !important;
+        padding-left: 12px; margin-bottom: 12px; display: block;
+    }
+
+    /* Linhas de Métricas */
+    .metric-row {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 8px 0; border-bottom: 1px solid #f8fafc;
+    }
+    .metric-label { color: #64748b !important; font-size: 14px !important; }
+    .metric-value { color: #1e293b !important; font-weight: 600; font-size: 14px !important; }
+
+    /* Estilo do Botão Principal */
+    .stButton>button, div[data-testid="stFormSubmitButton"]>button {
+        width: 100% !important; border-radius: 8px !important; font-size: 14px !important;
+        background-color: #f8fafc !important; color: #1e293b !important;
+        border: 1px solid #e2e8f0 !important; padding: 10px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Banner de Resultado Final */
+    .total-receber {
+        background: linear-gradient(135deg, #8B4513 0%, #5D2E0A 100%) !important;
+        color: #ffffff !important; padding: 20px; border-radius: 12px; text-align: center; margin-top: 15px;
+    }
+    .total-value { font-size: 26px; font-weight: 800; display: block; color: #ffffff !important; }
+    
+    @media (max-width: 640px) { .block-container { padding: 1rem !important; } }
     </style>
     """, unsafe_allow_html=True)
 
-@st.cache_data
-def load_data():
+# --- FUNÇÕES DE AUXÍLIO ---
+
+def get_medal_icon(medal_text):
+    m = str(medal_text).upper()
+    if "OURO" in m: return f"{medal_text} 🥇"
+    elif "PRATA" in m: return f"{medal_text} 🥈"
+    elif "BRONZE" in m: return f"{medal_text} 🥉"
+    return medal_text
+
+def f_rs(v):
+    if pd.isna(v) or str(v).strip() in ['0','0,00','-','R$ -']: return "R$ 0,00"
+    l = str(v).replace('R','').replace('$','').replace('S','').strip()
+    return f"R$ {l}"
+
+def f_nm(v):
+    if pd.isna(v) or str(v) in ['0','-','nan']: return "0"
+    return str(v).replace('R','').replace('$','').strip()
+
+def f_pc(v):
     try:
-        df = pd.read_csv('dados2_lideranca.csv', sep=';', encoding='latin-1', on_bad_lines='skip', engine='python')
-        df.columns = [str(c).strip().upper() for c in df.columns]
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar base de dados: {e}")
+        s = str(v).replace('%','').replace(',','.')
+        return f"{int(float(s))}%"
+    except: return str(v)
+
+# --- CARREGAMENTO DOS DADOS ---
+
+@st.cache_data
+def load():
+    try:
+        # Tenta carregar dados2_lideranca.csv conforme estrutura anterior
+        try: df = pd.read_csv("dados2_lideranca.csv", sep=';', encoding='latin-1')
+        except: df = pd.read_csv("dados2_lideranca.csv", sep=',', encoding='utf-8')
+        
+        df.columns = [c.strip().upper() for c in df.columns]
+        
+        # Mapeamento para nomes de variáveis curtas (blindagem de código)
+        m = {
+            'PRODUTIVIDADE ADERENCIA ROTEIRO': 'A1', 
+            'PREMIAÇÃO ADERENCIA ROTEIRO': 'A2',
+            'MEDALHA LOJA DO CORAÇÃO': 'L1', 
+            'PREMIAÇÃO MEDALHA LC': 'L2',
+            'META SELLOUT': 'S1', 
+            'REAL SELLOUT': 'S2',
+            'AING SELLOUT %': 'S3', 
+            'PREMIAÇÃO SELLOUT': 'S4',
+            'TOTAL A RECEBER': 'TOT', 
+            'PONTO EXTRA': 'P1',
+            'PONTO NATURAL': 'P2', 
+            'RUPTURA': 'P3', 
+            'MPDV': 'P4'
+        }
+        
+        # Tratamento de colunas dinâmicas (Nota e Matrícula)
+        c_nota = [c for c in df.columns if 'NOTA' in c and 'CORA' in c]
+        if c_nota: df = df.rename(columns={c_nota[0]: 'L0'})
+        
+        c_mat = [c for c in df.columns if 'MATRIC' in c]
+        k_mat = c_mat[0] if c_mat else df.columns[0]
+        df['ID_BUSCA'] = df[k_mat].astype(str).str.strip()
+        
+        return df.rename(columns=m)
+    except:
         return None
 
-df = load_data()
+df = load()
 
-# --- CABEÇALHO COM LOGO AO LADO DO TÍTULO ---
-col_logo, col_titulo = st.columns([1, 4])
-with col_logo:
-    # Logo oficial da 3 Corações
-    st.image("https://www.3coracoes.com.br/wp-content/themes/tres-coracoes/assets/images/logo-3-coracoes.png", width=120)
-with col_titulo:
-    st.write("##") # Ajuste de altura
-    st.title("Portal de Resultados e Performance")
+# Controle de Estado
+if 'consultado' not in st.session_state: st.session_state.consultado = False
+if 'matricula_id' not in st.session_state: st.session_state.matricula_id = ""
 
-st.markdown("---")
+# --- INTERFACE ---
 
-# --- ÁREA DE CONSULTA ---
-# Usando a matrícula fictícia como exemplo no placeholder
-col_input, col_btn = st.columns([3, 1])
-with col_input:
-    matricula_input = st.text_input(
-        "Identificação do Supervisor", 
-        placeholder="Exemplo: 1-38013", 
-        help="Insira a matrícula completa para visualizar os indicadores da equipe."
-    ).strip()
+st.markdown(f"""
+    <div class="header-container">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/6/63/Logo_grupo_3_cora%C3%A7%C3%B5es.png" class="logo-img">
+        <div class="main-title">PORTAL DE PERFORMANCE</div>
+        <p class="sub-header">Consulte seus resultados individuais</p>
+    </div>
+""", unsafe_allow_html=True)
 
-with col_btn:
-    st.write("##") # Alinhamento vertical
-    botao_consultar = st.button("CONSULTAR RESULTADOS")
+if df is not None:
+    # TELA 1: ACESSO
+    if not st.session_state.consultado:
+        _, col_login, _ = st.columns([0.05, 0.9, 0.05])
+        with col_login:
+            with st.form("form_acesso"):
+                acesso = st.text_input("Sua Matrícula:", placeholder="Ex: 1-49570")
+                if st.form_submit_button("Consultar Resultados"):
+                    if acesso:
+                        u_id = acesso.strip()
+                        u_df = df[df['ID_BUSCA'] == u_id]
+                        if not u_df.empty:
+                            st.session_state.consultado = True
+                            st.session_state.matricula_id = u_id
+                            st.rerun()
+                        else: st.error("Matrícula não encontrada.")
+                    else: st.warning("Informe sua matrícula.")
+    
+    # TELA 2: RESULTADOS
+    else:
+        u_df = df[df['ID_BUSCA'] == st.session_state.matricula_id]
+        r_zero = u_df.iloc[0]
+        
+        # Saudação com o primeiro nome
+        n_col = [c for c in df.columns if 'NOME' in c][0]
+        st.markdown(f"**Olá, {str(r_zero.get(n_col)).split()[0]}!** 👋")
+        
+        # Filtro de Mês
+        c_mes = [c for c in u_df.columns if 'M' in c and 'S' in c][0]
+        m_sel = st.selectbox("Selecione o Mês:", u_df[c_mes].unique())
+        r = u_df[u_df[c_mes] == m_sel].iloc[0]
 
-# --- LÓGICA DE EXIBIÇÃO ---
-if (botao_consultar or matricula_input) and df is not None:
-    try:
-        # Mapeamento de colunas
-        col_id = [c for c in df.columns if 'MATRICULA' in c and 'LIDER' in c][0]
-        col_lider_nome = 'LIDERANCA' 
-        col_mes = df.columns[0] # Primeira coluna da planilha
-        col_total_receber = 'TOTAL A RECEBER'
+        # CONTAINER 1: ADERÊNCIA
+        with st.container():
+            st.markdown('<p class="card-title">🎯 Aderência de Roteiro</p>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Atingimento</span><span class="metric-value">{f_pc(r.get("A1",0))}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Prêmio</span><span class="metric-value">{f_rs(r.get("A2",0))}</span></div>', unsafe_allow_html=True)
 
-        # Filtro
-        df_lider = df[df[col_id].astype(str).str.strip() == matricula_input].copy()
-
-        if not df_lider.empty:
-            nome_supervisor = str(df_lider[col_lider_nome].iloc[0])
+        # CONTAINER 2: LOJA DO CORAÇÃO
+        with st.container():
+            st.markdown('<p class="card-title">🏪 Loja do Coração</p>', unsafe_allow_html=True)
+            medalha = get_medal_icon(r.get("L1","-"))
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Medalha</span><span class="metric-value">{medalha}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Nota Final</span><span class="metric-value">{r.get("L0",0)}</span></div>', unsafe_allow_html=True)
             
-            # Cabeçalho do Resultado
-            st.subheader(f"👤 Supervisor(a): {nome_supervisor}")
+            # Sub-indicadores
+            with st.expander("Ver indicadores de loja"):
+                st.markdown(f'<div class="metric-row"><span class="metric-label">Ponto Extra</span><span class="metric-value">{r.get("P1",0)}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-row"><span class="metric-label">Ponto Nat.</span><span class="metric-value">{r.get("P2",0)}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-row"><span class="metric-label">Ruptura</span><span class="metric-value">{r.get("P3",0)}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-row"><span class="metric-label">MPDV</span><span class="metric-value">{r.get("P4",0)}</span></div>', unsafe_allow_html=True)
             
-            # Filtro de Mês na Sidebar
-            meses_lista = sorted(df_lider[col_mes].unique())
-            mes_sel = st.sidebar.selectbox("📅 Selecione o Período", meses_lista)
-            
-            df_final = df_lider[df_lider[col_mes] == mes_sel].copy()
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Prêmio LC</span><span class="metric-value">{f_rs(r.get("L2",0))}</span></div>', unsafe_allow_html=True)
 
-            # Tratamento de Moeda
-            def format_money(valor):
-                v = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
-                try: return float(v)
-                except: return 0.0
+        # CONTAINER 3: SELLOUT
+        with st.container():
+            st.markdown('<p class="card-title">📈 Sellout</p>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Meta</span><span class="metric-value">{f_nm(r.get("S1",0))}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Real</span><span class="metric-value">{f_nm(r.get("S2",0))}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Ating. %</span><span class="metric-value">{f_pc(r.get("S3",0))}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><span class="metric-label">Prêmio</span><span class="metric-value">{f_rs(r.get("S4",0))}</span></div>', unsafe_allow_html=True)
 
-            df_final[col_total_receber] = df_final[col_total_receber].apply(format_money)
-
-            # --- MÉTRICAS EM CARDS ---
-            st.markdown("### Resumo de Performance")
-            m1, m2, m3 = st.columns(3)
-            
-            total_equipe = len(df_final)
-            valor_total = df_final[col_total_receber].sum()
-            media_lc = pd.to_numeric(df_final['NOTA LOJA DO CORAÇÃO'].str.replace(',', '.'), errors='coerce').mean()
-
-            m1.metric("Total da Equipe", f"{total_equipe} Promotores")
-            m2.metric("Média Nota LC", f"{media_lc:.1f}")
-            # Formatação manual para Real (R$)
-            m3.metric("Total a Receber", f"R$ {valor_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-
-            # --- TABELA DETALHADA (SEM GRÁFICO) ---
-            st.markdown("---")
-            st.markdown(f"### 📋 Detalhamento Geral - Equipe {nome_supervisor} ({mes_sel})")
-            
-            ordem_solicitada = [
-                'LIDERANCA', col_mes, 'ANO', 'REGIONAL', 'FILIAL', 'NOME RH', 
-                'NOTA LOJA DO CORAÇÃO', 'MEDALHA LOJA DO CORAÇÃO', 'PREMIAÇÃO MEDALHA LC', 
-                'META SELLOUT', 'REAL SELLOUT', 'AING SELLOUT %', 'PREMIAÇÃO SELLOUT', 
-                'PRODUTIVIDADE ADERENCIA ROTEIRO', 'PREMIAÇÃO ADERENCIA ROTEIRO', 
-                'TOTAL A RECEBER', 'OBSERVACOES GERAIS', 'PONTO EXTRA', 
-                'PONTO NATURAL', 'RUPTURA', 'MPDV'
-            ]
-            
-            colunas_finais = [c for c in ordem_solicitada if c in df_final.columns]
-            
-            # Estilização da tabela para ocupar a largura total
-            st.dataframe(df_final[colunas_finais], use_container_width=True, hide_index=True)
-
-        else:
-            st.error(f"❌ Matrícula '{matricula_input}' não localizada na base de dados atual.")
-
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao processar os dados: {e}")
+        # BANNER DE PAGAMENTO TOTAL
+        st.markdown(f"""
+            <div class="total-receber">
+                <span style="font-size:11px; text-transform:uppercase; opacity:0.8; letter-spacing:1px;">Total Previsto a Receber</span>
+                <span class="total-value">{f_rs(r.get('TOT',0))}</span>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # OBSERVAÇÕES
+        raw_obs = str(r.get('OBS_GERAIS','')).strip()
+        if raw_obs.lower() not in ['nan', '0', '', 'none', 'null']:
+            st.write("")
+            st.markdown(f"""
+                <div style="background:#fdf6e3; padding:15px; border-radius:10px; border-left:4px solid #8B4513; color:#1e293b; font-size:14px;">
+                    <b style="color:#8B4513;">📝 Notas da Liderança:</b><br>{raw_obs}
+                </div>
+            """, unsafe_allow_html=True)
+        
+        st.write("")
+        if st.button("Realizar Nova Consulta"):
+            st.session_state.consultado = False
+            st.rerun()
+else:
+    st.error("Erro: Arquivo de dados não encontrado ou inacessível.")
