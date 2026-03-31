@@ -1,50 +1,81 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
-st.set_page_config(page_title="Diagnóstico de Dados", layout="wide")
+st.set_page_config(page_title="Portal de Performance - 3 Corações", layout="wide")
 
 @st.cache_data
 def load_data():
-    # Testamos os dois separadores mais comuns: ponto e vírgula e vírgula
-    for sep in [';', ',']:
-        try:
-            df = pd.read_csv('dados2_lideranca.csv', sep=sep, encoding='latin-1', on_bad_lines='skip')
-            df.columns = [str(c).strip().upper() for c in df.columns]
-            if 'LIDERANCA' in df.columns or 'LIDERANÇA' in df.columns:
-                return df
-        except:
-            continue
-    return None
+    try:
+        df = pd.read_csv('dados2_lideranca.csv', sep=';', encoding='latin-1', on_bad_lines='skip', engine='python')
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar o arquivo: {e}")
+        return None
 
 df = load_data()
 
-st.title("🔍 Diagnóstico de Matrículas")
+# Logo e Título
+st.image("https://www.3coracoes.com.br/wp-content/themes/tres-coracoes/assets/images/logo-3-coracoes.png", width=120)
+st.title("📊 Portal de Resultados")
 
-if df is not None:
-    # 1. Ajuste automático de nome de coluna
-    col_lider = 'LIDERANCA' if 'LIDERANCA' in df.columns else 'LIDERANÇA'
-    
-    st.write("### 1. Como as matrículas aparecem no seu arquivo:")
-    # Mostra as primeiras 10 matrículas reais que ele achou
-    lista_exemplo = df[col_lider].unique()[:15]
-    st.info(f"O Python encontrou estas matrículas: {list(lista_exemplo)}")
+# Busca
+matricula_input = st.text_input("Digite a Matrícula do Supervisor:", placeholder="Ex: 1-38013").strip()
+botao_consultar = st.button("CONSULTAR")
 
-    st.write("---")
-    
-    # 2. Área de Busca
-    matricula_input = st.text_input("Digite a matrícula exatamente como aparece na lista acima:").strip()
-    
-    if matricula_input:
-        # Busca exata e busca parcial
-        resultado = df[df[col_lider].astype(str).str.contains(matricula_input, na=False)]
+st.markdown("---")
+
+if (botao_consultar or matricula_input) and df is not None:
+    # Nomes exatos das colunas baseados no seu print
+    col_id = 'MATRICULA LIDERANCA' 
+    col_lider = 'LIDERANCA' # Aqui está o NOME do supervisor
+    col_mes = 'MÊS'
+    col_nome_rh = 'NOME RH'
+    col_total_receber = 'TOTAL A RECEBER'
+
+    # 1. Filtro pela matrícula na coluna correta
+    df_lider = df[df[col_id].astype(str).str.strip() == matricula_input]
+
+    if not df_lider.empty:
+        # 2. Pega o nome do Supervisor (Coluna LIDERANCA)
+        nome_supervisor = df_lider[col_lider].iloc[0]
+        st.header(f"👤 Supervisor: {nome_supervisor}")
+
+        # 3. Filtro de Mês na lateral
+        meses = sorted(df_lider[col_mes].unique())
+        mes_sel = st.sidebar.selectbox("📅 Selecione o Mês", meses)
+        df_final = df_lider[df_lider[col_mes] == mes_sel].copy()
+
+        # 4. Limpeza do Valor R$
+        df_final[col_total_receber] = df_final[col_total_receber].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
+        df_final[col_total_receber] = pd.to_numeric(df_final[col_total_receber], errors='coerce').fillna(0)
+
+        # 5. Métricas
+        c1, c2 = st.columns(2)
+        c1.metric("Equipe no Mês", len(df_final))
+        total_equipe = df_final[col_total_receber].sum()
+        c2.metric("Total a Receber (Equipe)", f"R$ {total_equipe:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+
+        # 6. Gráfico com Rótulos em R$
+        st.subheader(f"Distribuição de Premiação - {mes_sel}")
+        fig = px.bar(df_final, x=col_nome_rh, y=col_total_receber,
+                     text=df_final[col_total_receber].apply(lambda x: f'R$ {x:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')),
+                     color=col_total_receber, color_continuous_scale='Reds',
+                     labels={col_total_receber: 'Valor (R$)', col_nome_rh: 'Promotor'})
         
-        if not resultado.empty:
-            st.success(f"✅ Encontrado! {len(resultado)} linhas para esta matrícula.")
-            st.write(resultado.head())
-        else:
-            st.error("❌ Ainda não encontrado. Verifique se há pontos, traços ou espaços diferentes.")
-            
-    st.write("### 2. Visualização das primeiras linhas da sua planilha:")
-    st.dataframe(df.head(10))
-else:
-    st.error("Não consegui ler o arquivo 'dados2_lideranca.csv'. Verifique o nome do arquivo no GitHub.")
+        fig.update_traces(textposition='outside')
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 7. Tabela Ordenada
+        st.subheader("📋 Detalhamento")
+        ordem = ['LIDERANCA', 'MÊS', 'ANO', 'REGIONAL', 'FILIAL', 'NOME RH', 'NOTA LOJA DO CORAÇÃO', 
+                 'MEDALHA LOJA DO CORAÇÃO', 'PREMIAÇÃO MEDALHA LC', 'META SELLOUT', 'REAL SELLOUT', 
+                 'AING SELLOUT %', 'PREMIAÇÃO SELLOUT', 'PRODUTIVIDADE ADERENCIA ROTEIRO', 
+                 'PREMIAÇÃO ADERENCIA ROTEIRO', 'TOTAL A RECEBER', 'OBSERVACOES GERAIS', 
+                 'PONTO EXTRA', 'PONTO NATURAL', 'RUPTURA', 'MPDV']
+        
+        st.dataframe(df_final[[c for c in ordem if c in df_final.columns]], use_container_width=True)
+
+    else:
+        st.warning(f"Matrícula {matricula_input} não encontrada na coluna 'MATRICULA LIDERANCA'.")
