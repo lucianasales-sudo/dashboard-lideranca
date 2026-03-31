@@ -1,105 +1,116 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
-# 1. Configuração da página
-st.set_page_config(page_title="Portal de Performance - 3 Corações", layout="wide")
+# 1. Configuração da página e Estilo CSS para design profissional
+st.set_page_config(page_title="Portal de Resultados | 3 Corações", layout="wide")
+
+st.markdown("""
+    <style>
+    /* Cor de destaque da 3 Corações e fontes */
+    .main { background-color: #f8f9fa; }
+    h1 { color: #c30c15; font-weight: 800; }
+    .stButton>button { 
+        background-color: #c30c15; 
+        color: white; 
+        font-weight: bold; 
+        border-radius: 8px;
+        height: 3em;
+        transition: 0.3s;
+    }
+    .stButton>button:hover { background-color: #9d0a11; border: none; }
+    /* Estilização das métricas */
+    [data-testid="stMetricValue"] { color: #c30c15; font-size: 32px; }
+    [data-testid="stMetricLabel"] { font-size: 16px; font-weight: 600; }
+    </style>
+    """, unsafe_allow_html=True)
 
 @st.cache_data
 def load_data():
     try:
-        # Lê o arquivo tratando acentos e separador
         df = pd.read_csv('dados2_lideranca.csv', sep=';', encoding='latin-1', on_bad_lines='skip', engine='python')
-        # Limpa nomes de colunas (remove espaços e coloca em maiúsculo)
         df.columns = [str(c).strip().upper() for c in df.columns]
         return df
     except Exception as e:
-        st.error(f"Erro ao carregar o arquivo: {e}")
+        st.error(f"Erro ao carregar base de dados: {e}")
         return None
 
 df = load_data()
 
-# --- CABEÇALHO ---
-st.image("https://www.3coracoes.com.br/wp-content/themes/tres-coracoes/assets/images/logo-3-coracoes.png", width=120)
-st.title("📊 Portal de Resultados")
-
-# Instrução de uso
-st.info("💡 Digite a matrícula (ex: 1-38013) e clique em CONSULTAR.")
-
-# Área de busca
-col_b1, col_b2 = st.columns([3, 1])
-with col_b1:
-    matricula_input = st.text_input("Digite a Matrícula do Supervisor:", placeholder="Ex: 1-49570").strip()
-with col_b2:
-    st.write("##") # Alinhamento
-    botao_consultar = st.button("CONSULTAR")
+# --- CABEÇALHO COM LOGO AO LADO DO TÍTULO ---
+col_logo, col_titulo = st.columns([1, 4])
+with col_logo:
+    # Logo oficial da 3 Corações
+    st.image("https://www.3coracoes.com.br/wp-content/themes/tres-coracoes/assets/images/logo-3-coracoes.png", width=120)
+with col_titulo:
+    st.write("##") # Ajuste de altura
+    st.title("Portal de Resultados e Performance")
 
 st.markdown("---")
 
+# --- ÁREA DE CONSULTA ---
+# Usando a matrícula fictícia como exemplo no placeholder
+col_input, col_btn = st.columns([3, 1])
+with col_input:
+    matricula_input = st.text_input(
+        "Identificação do Supervisor", 
+        placeholder="Exemplo: 1-38013", 
+        help="Insira a matrícula completa para visualizar os indicadores da equipe."
+    ).strip()
+
+with col_btn:
+    st.write("##") # Alinhamento vertical
+    botao_consultar = st.button("CONSULTAR RESULTADOS")
+
+# --- LÓGICA DE EXIBIÇÃO ---
 if (botao_consultar or matricula_input) and df is not None:
     try:
-        # --- MAPEAMENTO ROBUSTO DE COLUNAS ---
-        # Procura colunas por palavras-chave para evitar erros de acentuação
+        # Mapeamento de colunas
         col_id = [c for c in df.columns if 'MATRICULA' in c and 'LIDER' in c][0]
         col_lider_nome = 'LIDERANCA' 
-        # Mês é geralmente a primeira coluna (index 0) ou contém 'S' e 'M'
-        col_mes = df.columns[0] 
-        col_nome_rh = 'NOME RH'
+        col_mes = df.columns[0] # Primeira coluna da planilha
         col_total_receber = 'TOTAL A RECEBER'
 
-        # 1. Filtra pela matrícula digitada
+        # Filtro
         df_lider = df[df[col_id].astype(str).str.strip() == matricula_input].copy()
 
         if not df_lider.empty:
-            # 2. Pega o nome real do Supervisor (Coluna LIDERANCA)
             nome_supervisor = str(df_lider[col_lider_nome].iloc[0])
-            st.header(f"👤 Supervisor: {nome_supervisor}")
-
-            # 3. Filtro de Mês na lateral
-            meses_lista = sorted(df_lider[col_mes].unique())
-            mes_sel = st.sidebar.selectbox("📅 Selecione o Mês", meses_lista)
             
-            # Filtro Final
+            # Cabeçalho do Resultado
+            st.subheader(f"👤 Supervisor(a): {nome_supervisor}")
+            
+            # Filtro de Mês na Sidebar
+            meses_lista = sorted(df_lider[col_mes].unique())
+            mes_sel = st.sidebar.selectbox("📅 Selecione o Período", meses_lista)
+            
             df_final = df_lider[df_lider[col_mes] == mes_sel].copy()
 
-            # 4. Limpeza e conversão do Valor 'TOTAL A RECEBER'
-            def limpar_moeda(valor):
+            # Tratamento de Moeda
+            def format_money(valor):
                 v = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
-                try:
-                    return float(v)
-                except:
-                    return 0.0
+                try: return float(v)
+                except: return 0.0
 
-            df_final[col_total_receber] = df_final[col_total_receber].apply(limpar_moeda)
+            df_final[col_total_receber] = df_final[col_total_receber].apply(format_money)
 
-            # 5. Cards de Resumo
-            c1, c2 = st.columns(2)
-            c1.metric("Equipe no Mês", len(df_final))
-            total_valor = df_final[col_total_receber].sum()
-            c2.metric("Total a Receber (Equipe)", f"R$ {total_valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-
-            # 6. Gráfico de Barras com Rótulo R$
-            st.subheader(f"Distribuição de Premiação - {mes_sel}")
+            # --- MÉTRICAS EM CARDS ---
+            st.markdown("### Resumo de Performance")
+            m1, m2, m3 = st.columns(3)
             
-            # Formata rótulos para o gráfico
-            df_final['ROTULO'] = df_final[col_total_receber].apply(lambda x: f'R$ {x:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.'))
-            
-            fig = px.bar(
-                df_final, 
-                x=col_nome_rh, 
-                y=col_total_receber,
-                text='ROTULO',
-                color=col_total_receber,
-                color_continuous_scale='Reds',
-                labels={col_total_receber: 'Valor (R$)', col_nome_rh: 'Promotor'}
-            )
-            
-            fig.update_traces(textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
+            total_equipe = len(df_final)
+            valor_total = df_final[col_total_receber].sum()
+            media_lc = pd.to_numeric(df_final['NOTA LOJA DO CORAÇÃO'].str.replace(',', '.'), errors='coerce').mean()
 
-            # 7. Tabela Detalhada (Ordem Solicitada)
-            st.subheader("📋 Detalhamento da Equipe")
-            ordem_colunas = [
+            m1.metric("Total da Equipe", f"{total_equipe} Promotores")
+            m2.metric("Média Nota LC", f"{media_lc:.1f}")
+            # Formatação manual para Real (R$)
+            m3.metric("Total a Receber", f"R$ {valor_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+
+            # --- TABELA DETALHADA (SEM GRÁFICO) ---
+            st.markdown("---")
+            st.markdown(f"### 📋 Detalhamento Geral - Equipe {nome_supervisor} ({mes_sel})")
+            
+            ordem_solicitada = [
                 'LIDERANCA', col_mes, 'ANO', 'REGIONAL', 'FILIAL', 'NOME RH', 
                 'NOTA LOJA DO CORAÇÃO', 'MEDALHA LOJA DO CORAÇÃO', 'PREMIAÇÃO MEDALHA LC', 
                 'META SELLOUT', 'REAL SELLOUT', 'AING SELLOUT %', 'PREMIAÇÃO SELLOUT', 
@@ -108,13 +119,13 @@ if (botao_consultar or matricula_input) and df is not None:
                 'PONTO NATURAL', 'RUPTURA', 'MPDV'
             ]
             
-            # Só mostra o que existir no DF
-            colunas_finais = [c for c in ordem_colunas if c in df_final.columns]
-            st.dataframe(df_final[colunas_finais], use_container_width=True)
+            colunas_finais = [c for c in ordem_solicitada if c in df_final.columns]
+            
+            # Estilização da tabela para ocupar a largura total
+            st.dataframe(df_final[colunas_finais], use_container_width=True, hide_index=True)
 
         else:
-            st.warning(f"Matrícula '{matricula_input}' não encontrada.")
+            st.error(f"❌ Matrícula '{matricula_input}' não localizada na base de dados atual.")
 
     except Exception as e:
-        st.error(f"Erro no processamento: {e}")
-        st.info("Verifique se o arquivo CSV está atualizado no GitHub.")
+        st.error(f"Ocorreu um erro ao processar os dados: {e}")
